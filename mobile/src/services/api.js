@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config/server';
 
-const api = axios.create({ baseURL: API_URL, timeout: 10000 });
+const api = axios.create({ baseURL: API_URL, timeout: 60000 });
 
 // Attach token to every request
 api.interceptors.request.use(async (config) => {
