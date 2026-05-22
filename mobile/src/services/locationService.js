@@ -1,10 +1,35 @@
-import Geolocation from 'react-native-geolocation-service';
+﻿import Geolocation from 'react-native-geolocation-service';
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 import { emitLocation } from './socket';
 import { LocationAPI } from './api';
 
 let watchId = null;
 let locationInterval = null;
+let statusInterval = null;
+
+const getBatteryLevel = async () => {
+  try {
+    const level = await DeviceInfo.getBatteryLevel();
+    return Math.round(level * 100);
+  } catch (err) {
+    return null;
+  }
+};
+
+export const reportLocationStatus = async (status, coords = null) => {
+  try {
+    const batteryLevel = await getBatteryLevel();
+    await LocationAPI.status({
+      status,
+      batteryLevel,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    });
+  } catch (err) {
+    // Best-effort health update; tracking must continue even if this fails.
+  }
+};
 
 export const requestLocationPermission = async () => {
   if (Platform.OS === 'android') {
@@ -30,12 +55,17 @@ export const requestLocationPermission = async () => {
         }
       );
 
-      return (
+      const allowed = (
         fineGranted === PermissionsAndroid.RESULTS.GRANTED &&
         bgGranted === PermissionsAndroid.RESULTS.GRANTED
       );
+      if (!allowed) {
+        await reportLocationStatus('permission_denied');
+      }
+      return allowed;
     } catch (err) {
       console.warn(err);
+      await reportLocationStatus('permission_denied');
       return false;
     }
   }
@@ -94,6 +124,7 @@ export const startTracking = (userId, onUpdate) => {
       // Also save to server via HTTP
       try {
         await LocationAPI.update({ latitude, longitude, accuracy, speed, heading, altitude });
+        await reportLocationStatus('active', { latitude, longitude });
       } catch (e) {
         // Ignore - socket handles real-time
       }
@@ -114,7 +145,22 @@ export const startTracking = (userId, onUpdate) => {
     }
   );
 
-  console.log('📍 Location tracking started, watchId:', watchId);
+  console.log('Location tracking started, watchId:', watchId);
+  statusInterval = setInterval(async () => {
+    try {
+      const coords = await getCurrentLocation();
+      await reportLocationStatus('active', coords);
+    } catch (error) {
+      if (error?.code === 2) {
+        await reportLocationStatus('gps_off');
+      } else if (error?.code === 1) {
+        await reportLocationStatus('permission_denied');
+      } else {
+        await reportLocationStatus('unknown');
+      }
+    }
+  }, 60000);
+
   return watchId;
 };
 
@@ -122,10 +168,15 @@ export const stopTracking = () => {
   if (watchId !== null) {
     Geolocation.clearWatch(watchId);
     watchId = null;
-    console.log('📍 Location tracking stopped');
+    console.log('Location tracking stopped');
   }
   if (locationInterval) {
     clearInterval(locationInterval);
     locationInterval = null;
   }
+  if (statusInterval) {
+    clearInterval(statusInterval);
+    statusInterval = null;
+  }
 };
+

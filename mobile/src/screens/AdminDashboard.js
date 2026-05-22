@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+﻿import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   StatusBar, Platform, Alert, FlatList, Modal, TextInput
@@ -19,9 +19,12 @@ const AdminDashboard = () => {
   const [historyPath, setHistoryPath] = useState([]);
   const [highlights, setHighlights] = useState([]);
   const [geofences, setGeofences] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [rangeTemplates, setRangeTemplates] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [mapCenter, setMapCenter] = useState({ latitude: 23.0225, longitude: 72.5714 });
 
-  const [tab, setTab] = useState('map'); // 'map' | 'users' | 'geofence'
+  const [tab, setTab] = useState('map');
 
   // Geofence modal
   const [showFenceModal, setShowFenceModal] = useState(false);
@@ -47,12 +50,16 @@ const AdminDashboard = () => {
 
   const loadData = async () => {
     try {
-      const [usersRes, fencesRes] = await Promise.all([
+      const [usersRes, fencesRes, alertsRes, templatesRes] = await Promise.all([
         AdminAPI.users(),
         GeofenceAPI.list(),
+        AdminAPI.alerts(),
+        AdminAPI.rangeTemplates(),
       ]);
       setUsers(usersRes.data.users || []);
       setGeofences(fencesRes.data.geofences || []);
+      setAlerts(alertsRes.data.alerts || []);
+      setRangeTemplates(templatesRes.data.templates || []);
 
       // Load latest locations
       const latestRes = await LocationAPI.allLatest();
@@ -64,6 +71,9 @@ const AdminDashboard = () => {
             longitude: item.location.longitude,
             name: item.user.name,
             lastSeen: item.user.lastSeen,
+            lastBatteryLevel: item.user.lastBatteryLevel,
+            locationStatus: item.user.locationStatus,
+            lastStatusAt: item.user.lastStatusAt,
           };
         }
       }
@@ -155,6 +165,7 @@ const AdminDashboard = () => {
 
       if (fenceMode === 'all') {
         const res = await GeofenceAPI.createAll(payload);
+        await AdminAPI.createRangeTemplate(payload).catch(() => {});
         Alert.alert('Success', `Range applied to ${res.data.count} users.`);
       } else {
         await GeofenceAPI.create({
@@ -168,6 +179,39 @@ const AdminDashboard = () => {
       await loadData();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to create range');
+    }
+  };
+
+  const applyTemplate = (template) => {
+    setFenceMode('all');
+    setFenceUser(null);
+    setFenceName(template.name);
+    setFenceRadius(String(template.radiusMeters));
+    setFenceLat(String(template.centerLat));
+    setFenceLng(String(template.centerLng));
+    setShowFenceModal(true);
+  };
+
+  const deleteTemplate = async (template) => {
+    Alert.alert('Delete Template', `Delete "${template.name}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await AdminAPI.deleteRangeTemplate(template._id);
+          await loadData();
+        },
+      },
+    ]);
+  };
+
+  const acknowledgeAlert = async (alert) => {
+    try {
+      await AdminAPI.acknowledgeAlert(alert._id);
+      setAlerts((prev) => prev.map((item) => item._id === alert._id ? { ...item, acknowledged: true } : item));
+    } catch (err) {
+      Alert.alert('Error', 'Failed to acknowledge alert');
     }
   };
 
@@ -208,12 +252,22 @@ const AdminDashboard = () => {
     ]);
   };
 
+  const filteredUsers = users.filter((u) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return u.name?.toLowerCase().includes(query) || u.phone?.includes(query);
+  });
+
+  const isUserOnline = (u) => (
+    u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime()) < 2 * 60 * 1000
+  );
+
   const renderTabBar = () => (
     <View style={styles.tabBar}>
-      {['map', 'users', 'geofence'].map((t) => (
+      {['map', 'users', 'geofence', 'alerts', 'templates'].map((t) => (
         <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
           <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-            {t === 'map' ? '🗺️ Map' : t === 'users' ? '👥 Users' : '🔒 Zones'}
+            {t === 'map' ? 'Map' : t === 'users' ? 'Users' : t === 'geofence' ? 'Zones' : t === 'alerts' ? 'Alerts' : 'Templates'}
           </Text>
         </TouchableOpacity>
       ))}
@@ -227,7 +281,7 @@ const AdminDashboard = () => {
       {/* Alert Banner */}
       {activeAlert && (
         <TouchableOpacity style={styles.alertBanner} onPress={() => { setActiveAlert(null); stopAlert(); }}>
-          <Text style={styles.alertBannerText}>⚠️ {activeAlert.message} — Tap to dismiss</Text>
+          <Text style={styles.alertBannerText}>Alert: {activeAlert.message} - Tap to dismiss</Text>
         </TouchableOpacity>
       )}
 
@@ -251,6 +305,11 @@ const AdminDashboard = () => {
             style={styles.map}
             center={mapCenter}
             zoom={selectedUser ? 15 : 12}
+            onMapPress={(coords) => {
+              setMapCenter(coords);
+              setFenceLat(coords.latitude.toString());
+              setFenceLng(coords.longitude.toString());
+            }}
             markers={[
               ...Object.entries(userLocations).map(([uid, loc]) => ({
                 latitude: loc.latitude,
@@ -311,21 +370,36 @@ const AdminDashboard = () => {
       {/* USERS TAB */}
       {tab === 'users' && (
         <FlatList
-          data={users}
+          data={filteredUsers}
           keyExtractor={(u) => u._id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <TextInput
+              style={styles.searchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search users by name or phone"
+              placeholderTextColor="#64748b"
+            />
+          }
           renderItem={({ item: u }) => (
             <View style={styles.userCard}>
               <View style={styles.userInfo}>
                 <Text style={styles.userName}>{u.name}</Text>
                 <Text style={styles.userPhone}>{u.phone}</Text>
                 <Text style={styles.userStatus}>
-                  {u.lastSeen ? `Last seen: ${new Date(u.lastSeen).toLocaleTimeString()}` : 'Never seen'}
+                  {isUserOnline(u) ? 'Online now' : u.lastSeen ? `Offline - last seen ${new Date(u.lastSeen).toLocaleTimeString()}` : 'Never seen'}
+                </Text>
+                <Text style={styles.userStatus}>
+                  Status: {u.locationStatus || userLocations[u._id]?.locationStatus || 'unknown'}
+                  {typeof (u.lastBatteryLevel ?? userLocations[u._id]?.lastBatteryLevel) === 'number'
+                    ? ` | Battery: ${u.lastBatteryLevel ?? userLocations[u._id]?.lastBatteryLevel}%`
+                    : ''}
                 </Text>
               </View>
               <View style={styles.userActions}>
                 <TouchableOpacity style={styles.actionBtn} onPress={() => selectUser(u)}>
-                  <Text style={styles.actionBtnText}>🗺️ Track</Text>
+                  <Text style={styles.actionBtnText}>Track</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, styles.fenceBtn]} onPress={() => openFenceModal(u)}>
                   <Text style={styles.actionBtnText}>Range</Text>
@@ -355,18 +429,78 @@ const AdminDashboard = () => {
           }
           renderItem={({ item: f }) => (
             <View style={styles.fenceCard}>
-              <View style={styles.fenceIcon}><Text style={{ fontSize: 28 }}>🔒</Text></View>
+              <View style={styles.fenceIcon}><Text style={{ fontSize: 20, color: '#ef4444' }}>Zone</Text></View>
               <View style={styles.fenceInfo}>
                 <Text style={styles.fenceName}>{f.name}</Text>
-                <Text style={styles.fenceUser}>👤 {f.targetUserId?.name || 'Unknown'}</Text>
-                <Text style={styles.fenceRadius}>📏 Radius: {f.radiusMeters}m</Text>
+                <Text style={styles.fenceUser}>User: {f.targetUserId?.name || 'Unknown'}</Text>
+                <Text style={styles.fenceRadius}>Radius: {f.radiusMeters}m</Text>
                 <Text style={styles.fenceCoords}>
-                  📍 {f.centerLat.toFixed(4)}, {f.centerLng.toFixed(4)}
+                  {f.centerLat.toFixed(4)}, {f.centerLng.toFixed(4)}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => deleteGeofence(f._id)} style={styles.deleteBtn}>
-                <Text style={styles.deleteBtnText}>🗑️</Text>
+                <Text style={styles.deleteBtnText}>Delete</Text>
               </TouchableOpacity>
+            </View>
+          )}
+        />
+      )}
+
+      {/* ALERTS TAB */}
+      {tab === 'alerts' && (
+        <FlatList
+          data={alerts}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={<Text style={styles.emptyText}>No alerts yet.</Text>}
+          renderItem={({ item }) => (
+            <View style={[styles.alertCard, item.acknowledged && styles.alertCardDone]}>
+              <View style={styles.userInfo}>
+                <Text style={styles.alertTitle}>{item.userName || 'User'} - {item.type?.replace(/_/g, ' ')}</Text>
+                <Text style={styles.alertMessage}>{item.message}</Text>
+                <Text style={styles.userStatus}>
+                  {item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}
+                </Text>
+              </View>
+              {!item.acknowledged && (
+                <TouchableOpacity style={styles.ackBtn} onPress={() => acknowledgeAlert(item)}>
+                  <Text style={styles.actionBtnText}>Ack</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        />
+      )}
+
+      {/* TEMPLATES TAB */}
+      {tab === 'templates' && (
+        <FlatList
+          data={rangeTemplates}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <TouchableOpacity style={styles.rangeAllBtn} onPress={openAllRangeModal}>
+              <Text style={styles.rangeAllBtnText}>Create Range Template</Text>
+            </TouchableOpacity>
+          }
+          ListEmptyComponent={<Text style={styles.emptyText}>No templates yet. Apply a range to all users to save one.</Text>}
+          renderItem={({ item }) => (
+            <View style={styles.fenceCard}>
+              <View style={styles.fenceInfo}>
+                <Text style={styles.fenceName}>{item.name}</Text>
+                <Text style={styles.fenceRadius}>Radius: {item.radiusMeters}m</Text>
+                <Text style={styles.fenceCoords}>
+                  {item.centerLat.toFixed(4)}, {item.centerLng.toFixed(4)}
+                </Text>
+              </View>
+              <View style={styles.userActions}>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => applyTemplate(item)}>
+                  <Text style={styles.actionBtnText}>Apply</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.deleteUserBtn]} onPress={() => deleteTemplate(item)}>
+                  <Text style={styles.actionBtnText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         />
@@ -480,6 +614,17 @@ const styles = StyleSheet.create({
 
   listContent: { padding: 16 },
   emptyText: { textAlign: 'center', color: '#4a5568', fontSize: 15, marginTop: 48, lineHeight: 24 },
+  searchInput: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
 
   userCard: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 16,
@@ -502,6 +647,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(220,38,38,0.18)', borderColor: 'rgba(220,38,38,0.4)',
   },
   actionBtnText: { color: '#e2e8f0', fontSize: 12, fontWeight: '700' },
+  ackBtn: {
+    backgroundColor: 'rgba(34,197,94,0.16)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.35)',
+  },
+
+  alertCard: {
+    backgroundColor: 'rgba(239,68,68,0.09)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.26)',
+  },
+  alertCardDone: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  alertTitle: { fontSize: 15, fontWeight: '800', color: '#fff', textTransform: 'capitalize' },
+  alertMessage: { fontSize: 13, color: '#cbd5e1', marginTop: 4, lineHeight: 18 },
 
   rangeAllBtn: {
     backgroundColor: 'rgba(59,130,246,0.16)', borderRadius: 14,
@@ -558,3 +728,4 @@ const styles = StyleSheet.create({
 });
 
 export default AdminDashboard;
+

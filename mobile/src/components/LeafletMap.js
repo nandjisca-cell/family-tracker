@@ -14,6 +14,7 @@ const LeafletMap = ({
   circles = [],
   polylines = [],
   style,
+  onMapPress,
 }) => {
   const html = useMemo(() => {
     const mapCenter = center || DEFAULT_CENTER;
@@ -76,6 +77,14 @@ const LeafletMap = ({
       }).addTo(map);
     });
 
+    map.on('click', (event) => {
+      window.ReactNativeWebView?.postMessage(JSON.stringify({
+        type: 'map_press',
+        latitude: event.latlng.lat,
+        longitude: event.latlng.lng
+      }));
+    });
+
     setTimeout(() => map.invalidateSize(), 250);
   </script>
 </body>
@@ -90,6 +99,17 @@ const LeafletMap = ({
       javaScriptEnabled
       domStorageEnabled
       mixedContentMode="always"
+      onMessage={(event) => {
+        if (!onMapPress) return;
+        try {
+          const payload = JSON.parse(event.nativeEvent.data);
+          if (payload.type === 'map_press') {
+            onMapPress({ latitude: payload.latitude, longitude: payload.longitude });
+          }
+        } catch (err) {
+          // Ignore malformed map messages.
+        }
+      }}
     />
   );
 };

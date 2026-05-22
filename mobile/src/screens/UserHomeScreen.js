@@ -11,7 +11,9 @@ import {
   startTracking,
   stopTracking,
   getCurrentLocation,
+  reportLocationStatus,
 } from '../services/locationService';
+import { LocationAPI } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 
 const UserHomeScreen = () => {
@@ -45,6 +47,7 @@ const UserHomeScreen = () => {
     setPermGranted(granted);
     
     if (!granted) {
+      await reportLocationStatus('permission_denied');
       setChecking(false);
       return;
     }
@@ -54,6 +57,7 @@ const UserHomeScreen = () => {
     setLocationEnabled(enabled);
     
     if (!enabled) {
+      await reportLocationStatus('gps_off');
       setChecking(false);
       return;
     }
@@ -62,6 +66,7 @@ const UserHomeScreen = () => {
     try {
       const coords = await getCurrentLocation();
       setLocation(coords);
+      await reportLocationStatus('active', coords);
       setTracking(true);
       
       startTracking(user._id, (loc) => {
@@ -86,6 +91,25 @@ const UserHomeScreen = () => {
     if (Platform.OS === 'android') {
       Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS');
     }
+  };
+
+  const sendSos = () => {
+    Alert.alert('Send SOS Alert', 'Your admin will receive an emergency alert with your latest location.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Send SOS',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const coords = location || await getCurrentLocation();
+            await LocationAPI.sos(coords);
+            Alert.alert('SOS Sent', 'Your emergency alert has been sent to the admin.');
+          } catch (err) {
+            Alert.alert('SOS Failed', 'Could not send SOS. Please check your internet connection.');
+          }
+        },
+      },
+    ]);
   };
 
   // ============ FORCE LOCATION GATE ============
@@ -209,6 +233,9 @@ const UserHomeScreen = () => {
         <Text style={styles.trackingNote}>
           🔒 Your location is being shared with your family admin
         </Text>
+        <TouchableOpacity style={styles.sosBtn} onPress={sendSos}>
+          <Text style={styles.sosBtnText}>SOS Emergency</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -277,6 +304,14 @@ const styles = StyleSheet.create({
   coordValue: { fontSize: 16, color: '#e2e8f0', fontWeight: '700', fontFamily: 'monospace' },
   coordDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.1)' },
   trackingNote: { textAlign: 'center', color: '#475569', fontSize: 12 },
+  sosBtn: {
+    backgroundColor: '#dc2626',
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  sosBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },
 });
 
 export default UserHomeScreen;

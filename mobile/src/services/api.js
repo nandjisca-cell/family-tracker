@@ -35,6 +35,8 @@ export const AuthAPI = {
 
 export const LocationAPI = {
   update: (coords) => api.post('/location/update', coords),
+  status: (data) => api.post('/location/status', data),
+  sos: (coords) => api.post('/location/sos', coords),
   history: (userId) => api.get(`/location/history/${userId}`),
   allLatest: () => api.get('/location/all-latest'),
   highlights: (userId) => api.get(`/location/highlights/${userId}`),
@@ -52,6 +54,11 @@ export const AdminAPI = {
   users: () => api.get('/admin/users'),
   deactivateUser: (id) => api.put(`/admin/users/${id}/deactivate`),
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
+  alerts: () => api.get('/admin/alerts'),
+  acknowledgeAlert: (id) => api.put(`/admin/alerts/${id}/ack`),
+  rangeTemplates: () => api.get('/admin/range-templates'),
+  createRangeTemplate: (data) => api.post('/admin/range-templates', data),
+  deleteRangeTemplate: (id) => api.delete(`/admin/range-templates/${id}`),
   resetDevice: (resetCode) => api.post('/admin/reset-device', { resetCode }),
 };
 

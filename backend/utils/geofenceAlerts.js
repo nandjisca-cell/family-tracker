@@ -1,5 +1,6 @@
 const Geofence = require('../models/Geofence');
 const User = require('../models/User');
+const Alert = require('../models/Alert');
 const geolib = require('geolib');
 
 const checkGeofenceAlerts = async ({ userId, latitude, longitude, accuracy, timestamp, io, connectedUsers }) => {
@@ -24,7 +25,8 @@ const checkGeofenceAlerts = async ({ userId, latitude, longitude, accuracy, time
       const adminInfo = connectedUsers?.get(fence.adminId.toString());
 
       if (adminInfo && io) {
-        io.to(adminInfo.socketId).emit('geofence_alert', {
+        const payload = {
+          type: 'range_exit',
           userId,
           userName,
           fenceId: fence._id,
@@ -36,8 +38,22 @@ const checkGeofenceAlerts = async ({ userId, latitude, longitude, accuracy, time
           distance,
           radiusMeters: fence.radiusMeters,
           timestamp: new Date(timestamp || Date.now()),
-        });
+        };
+        io.to(adminInfo.socketId).emit('geofence_alert', payload);
       }
+
+      await Alert.create({
+        type: 'range_exit',
+        userId,
+        userName,
+        fenceId: fence._id,
+        fenceName: fence.name,
+        message,
+        latitude,
+        longitude,
+        distance,
+        radiusMeters: fence.radiusMeters,
+      });
 
       fence.userIsInside = false;
       fence.lastAlertAt = new Date();

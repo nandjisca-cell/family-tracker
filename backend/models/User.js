@@ -19,6 +19,9 @@ const userSchema = new mongoose.Schema({
   
   isActive: { type: Boolean, default: true },
   lastSeen: { type: Date, default: null },
+  lastBatteryLevel: { type: Number, default: null },
+  locationStatus: { type: String, enum: ['active', 'permission_denied', 'gps_off', 'unknown'], default: 'unknown' },
+  lastStatusAt: { type: Date, default: null },
 }, { timestamps: true });
 
 userSchema.pre('save', async function(next) {
