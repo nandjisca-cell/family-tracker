@@ -10,7 +10,7 @@ router.post('/create', async (req, res) => {
 
     const { targetUserId, centerLat, centerLng, radiusMeters, name } = req.body;
 
-    if (!targetUserId || !centerLat || !centerLng || !radiusMeters) {
+    if (!targetUserId || centerLat === undefined || centerLng === undefined || !radiusMeters) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -31,6 +31,39 @@ router.post('/create', async (req, res) => {
     await fence.save();
 
     res.status(201).json({ geofence: fence });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin: create the same range for all active family users
+router.post('/create-all', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+
+    const { centerLat, centerLng, radiusMeters, name } = req.body;
+    if (centerLat === undefined || centerLng === undefined || !radiusMeters) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const users = await User.find({ role: 'user', isActive: true }).select('_id');
+    await Geofence.updateMany(
+      { adminId: req.user._id, targetUserId: { $in: users.map(user => user._id) } },
+      { isActive: false }
+    );
+
+    const fences = await Geofence.insertMany(users.map(user => ({
+      adminId: req.user._id,
+      targetUserId: user._id,
+      centerLat,
+      centerLng,
+      radiusMeters,
+      name: name || 'Allowed Range',
+      isActive: true,
+      userIsInside: true,
+    })));
+
+    res.status(201).json({ geofences: fences, count: fences.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

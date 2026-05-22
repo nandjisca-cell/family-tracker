@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Location = require('../models/Location');
 const User = require('../models/User');
+const { checkGeofenceAlerts } = require('../utils/geofenceAlerts');
 
 // User: update own location
 router.post('/update', async (req, res) => {
@@ -22,6 +23,15 @@ router.post('/update', async (req, res) => {
       timestamp: new Date()
     });
     await loc.save();
+    await checkGeofenceAlerts({
+      userId: req.user._id,
+      latitude,
+      longitude,
+      accuracy,
+      timestamp: loc.timestamp,
+      io: req.app.get('io'),
+      connectedUsers: req.app.get('connectedUsers'),
+    });
 
     // Also emit via socket if available
     const io = req.app.get('io');

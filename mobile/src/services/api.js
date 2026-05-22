@@ -42,6 +42,7 @@ export const LocationAPI = {
 
 export const GeofenceAPI = {
   create: (data) => api.post('/geofence/create', data),
+  createAll: (data) => api.post('/geofence/create-all', data),
   list: () => api.get('/geofence/list'),
   update: (id, data) => api.put(`/geofence/${id}`, data),
   delete: (id) => api.delete(`/geofence/${id}`),
@@ -50,6 +51,7 @@ export const GeofenceAPI = {
 export const AdminAPI = {
   users: () => api.get('/admin/users'),
   deactivateUser: (id) => api.put(`/admin/users/${id}/deactivate`),
+  deleteUser: (id) => api.delete(`/admin/users/${id}`),
   resetDevice: (resetCode) => api.post('/admin/reset-device', { resetCode }),
 };
 

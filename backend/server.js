@@ -13,9 +13,11 @@ const geofenceRoutes = require('./routes/geofence');
 const adminRoutes = require('./routes/admin');
 const { authenticateToken } = require('./middleware/auth');
 const { cleanOldLocations } = require('./utils/cleanup');
+const { checkGeofenceAlerts } = require('./utils/geofenceAlerts');
 
 const app = express();
 const server = http.createServer(app);
+const connectedUsers = new Map(); // userId -> socket info
 
 const io = new Server(server, {
   cors: {
@@ -29,6 +31,7 @@ app.use(express.json());
 
 // Make io accessible in routes
 app.set('io', io);
+app.set('connectedUsers', connectedUsers);
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/family-tracker';
@@ -44,9 +47,6 @@ app.use('/api/admin', authenticateToken, adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
-
-// Socket.IO for real-time location
-const connectedUsers = new Map(); // userId -> socketId
 
 io.on('connection', (socket) => {
   console.log('📱 Client connected:', socket.id);
@@ -65,8 +65,7 @@ io.on('connection', (socket) => {
     
     try {
       const Location = require('./models/Location');
-      const Geofence = require('./models/Geofence');
-      const geolib = require('geolib');
+      const User = require('./models/User');
 
       // Save location to DB
       const loc = new Location({
@@ -77,6 +76,7 @@ io.on('connection', (socket) => {
         timestamp: new Date(timestamp)
       });
       await loc.save();
+      await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
 
       // Broadcast to all admin sockets
       for (const [uid, info] of connectedUsers.entries()) {
@@ -91,39 +91,15 @@ io.on('connection', (socket) => {
         }
       }
 
-      // Check geofence violations
-      const geofences = await Geofence.find({ targetUserId: userId, isActive: true });
-      for (const fence of geofences) {
-        const distance = geolib.getDistance(
-          { latitude, longitude },
-          { latitude: fence.centerLat, longitude: fence.centerLng }
-        );
-        
-        const wasInside = fence.userIsInside;
-        const isInside = distance <= fence.radiusMeters;
-        
-        if (wasInside && !isInside) {
-          // User left geofence - alert admin
-          const adminInfo = connectedUsers.get(fence.adminId.toString());
-          if (adminInfo) {
-            io.to(adminInfo.socketId).emit('geofence_alert', {
-              userId,
-              fenceId: fence._id,
-              message: `⚠️ User left geofence zone!`,
-              latitude,
-              longitude,
-              distance,
-              timestamp: new Date()
-            });
-          }
-          // Update fence status
-          fence.userIsInside = false;
-          await fence.save();
-        } else if (!wasInside && isInside) {
-          fence.userIsInside = true;
-          await fence.save();
-        }
-      }
+      await checkGeofenceAlerts({
+        userId,
+        latitude,
+        longitude,
+        accuracy,
+        timestamp,
+        io,
+        connectedUsers,
+      });
     } catch (err) {
       console.error('Location update error:', err);
     }

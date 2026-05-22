@@ -35,7 +35,7 @@ const RegisterScreen = ({ navigation }) => {
       ]);
     } catch (err) {
       const message = err.response?.data?.error
-        || (err.request ? 'Server se connect nahi ho pa raha. Internet connection aur server URL check karein.' : 'Please try again');
+        || (err.request ? 'Unable to connect to the server. Please check your internet connection and server URL.' : 'Please try again');
       Alert.alert('Registration Failed', message);
     } finally {
       setLoading(false);

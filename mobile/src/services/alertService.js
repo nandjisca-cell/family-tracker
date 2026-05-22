@@ -27,7 +27,7 @@ PushNotification.createChannel({
 const VIBRATION_PATTERN = [500, 500, 500, 500, 500, 500, 500, 500, 500, 500];
 
 export const triggerGeofenceAlert = (data) => {
-  const { userId, message } = data;
+  const { userName, message } = data;
 
   // Vibrate intensely
   Vibration.vibrate(VIBRATION_PATTERN, true);
@@ -35,8 +35,8 @@ export const triggerGeofenceAlert = (data) => {
   // Local notification
   PushNotification.localNotification({
     channelId: 'geofence-alerts',
-    title: '⚠️ GEOFENCE ALERT!',
-    message: message || 'Family member has left the safe zone!',
+    title: 'Range Alert',
+    message: message || `${userName || 'A family member'} has left the allowed range.`,
     importance: 'high',
     priority: 'high',
     playSound: true,
@@ -52,8 +52,8 @@ export const triggerGeofenceAlert = (data) => {
 
   // Show alert dialog
   Alert.alert(
-    '⚠️ GEOFENCE VIOLATION',
-    message || 'A family member has left the safe zone!',
+    'Range Alert',
+    message || `${userName || 'A family member'} has left the allowed range.`,
     [
       { text: 'Dismiss', style: 'cancel', onPress: () => Vibration.cancel() },
       { text: 'View Map', onPress: () => Vibration.cancel() },

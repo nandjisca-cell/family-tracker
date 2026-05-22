@@ -25,6 +25,7 @@ const AdminDashboard = () => {
 
   // Geofence modal
   const [showFenceModal, setShowFenceModal] = useState(false);
+  const [fenceMode, setFenceMode] = useState('single');
   const [fenceUser, setFenceUser] = useState(null);
   const [fenceLat, setFenceLat] = useState('');
   const [fenceLng, setFenceLng] = useState('');
@@ -119,6 +120,7 @@ const AdminDashboard = () => {
   };
 
   const openFenceModal = (usr) => {
+    setFenceMode('single');
     setFenceUser(usr);
     const loc = userLocations[usr._id];
     if (loc) {
@@ -128,26 +130,70 @@ const AdminDashboard = () => {
     setShowFenceModal(true);
   };
 
+  const openAllRangeModal = () => {
+    setFenceMode('all');
+    setFenceUser(null);
+    setFenceName('Allowed Range');
+    setFenceRadius('5000');
+    setFenceLat(mapCenter.latitude.toString());
+    setFenceLng(mapCenter.longitude.toString());
+    setShowFenceModal(true);
+  };
+
   const createGeofence = async () => {
-    if (!fenceUser || !fenceLat || !fenceLng || !fenceRadius) {
+    if ((fenceMode === 'single' && !fenceUser) || !fenceLat || !fenceLng || !fenceRadius) {
       Alert.alert('Error', 'Please fill all fields');
       return;
     }
     try {
-      await GeofenceAPI.create({
-        targetUserId: fenceUser._id,
+      const payload = {
         centerLat: parseFloat(fenceLat),
         centerLng: parseFloat(fenceLng),
         radiusMeters: parseInt(fenceRadius),
         name: fenceName,
-      });
+      };
+
+      if (fenceMode === 'all') {
+        const res = await GeofenceAPI.createAll(payload);
+        Alert.alert('Success', `Range applied to ${res.data.count} users.`);
+      } else {
+        await GeofenceAPI.create({
+          ...payload,
+          targetUserId: fenceUser._id,
+        });
+        Alert.alert('Success', `Range "${fenceName}" created for ${fenceUser.name}.`);
+      }
+
       setShowFenceModal(false);
       await loadData();
-      Alert.alert('✅ Success', `Geofence "${fenceName}" created for ${fenceUser.name}`);
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Failed to create geofence');
+      Alert.alert('Error', err.response?.data?.error || 'Failed to create range');
     }
   };
+
+  const deleteUser = (usr) => {
+    Alert.alert('Delete User', `Delete ${usr.name} and all saved location data? This cannot be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await AdminAPI.deleteUser(usr._id);
+            if (selectedUser?._id === usr._id) {
+              setSelectedUser(null);
+              setHistoryPath([]);
+              setHighlights([]);
+            }
+            await loadData();
+          } catch (err) {
+            Alert.alert('Error', err.response?.data?.error || 'Failed to delete user');
+          }
+        },
+      },
+    ]);
+  };
+
 
   const deleteGeofence = async (id) => {
     Alert.alert('Delete Geofence', 'Are you sure?', [
@@ -282,7 +328,10 @@ const AdminDashboard = () => {
                   <Text style={styles.actionBtnText}>🗺️ Track</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, styles.fenceBtn]} onPress={() => openFenceModal(u)}>
-                  <Text style={styles.actionBtnText}>🔒 Zone</Text>
+                  <Text style={styles.actionBtnText}>Range</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, styles.deleteUserBtn]} onPress={() => deleteUser(u)}>
+                  <Text style={styles.actionBtnText}>Delete</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -296,8 +345,13 @@ const AdminDashboard = () => {
           data={geofences}
           keyExtractor={(f) => f._id}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            <TouchableOpacity style={styles.rangeAllBtn} onPress={openAllRangeModal}>
+              <Text style={styles.rangeAllBtnText}>Set Range for All Users</Text>
+            </TouchableOpacity>
+          }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No geofences created yet.{'\n'}Go to Users tab and tap 🔒 Zone</Text>
+            <Text style={styles.emptyText}>No ranges created yet.{'\n'}Create a range for one user or all users.</Text>
           }
           renderItem={({ item: f }) => (
             <View style={styles.fenceCard}>
@@ -322,11 +376,11 @@ const AdminDashboard = () => {
       <Modal visible={showFenceModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>🔒 Set Safe Zone</Text>
-            <Text style={styles.modalSub}>for {fenceUser?.name}</Text>
+            <Text style={styles.modalTitle}>Set Allowed Range</Text>
+            <Text style={styles.modalSub}>{fenceMode === 'all' ? 'for all active users' : `for ${fenceUser?.name}`}</Text>
 
-            <Text style={styles.modalLabel}>Zone Name</Text>
-            <TextInput style={styles.modalInput} value={fenceName} onChangeText={setFenceName} placeholder="e.g. Home, School" placeholderTextColor="#4a5568" />
+            <Text style={styles.modalLabel}>Range Name</Text>
+            <TextInput style={styles.modalInput} value={fenceName} onChangeText={setFenceName} placeholder="e.g. Home, School, Office" placeholderTextColor="#4a5568" />
 
             <Text style={styles.modalLabel}>Center Latitude</Text>
             <TextInput style={styles.modalInput} value={fenceLat} onChangeText={setFenceLat} placeholder="e.g. 23.0225" keyboardType="decimal-pad" placeholderTextColor="#4a5568" />
@@ -337,12 +391,28 @@ const AdminDashboard = () => {
             <Text style={styles.modalLabel}>Radius (meters)</Text>
             <TextInput style={styles.modalInput} value={fenceRadius} onChangeText={setFenceRadius} placeholder="e.g. 500" keyboardType="number-pad" placeholderTextColor="#4a5568" />
 
+            <View style={styles.radiusPresets}>
+              {[
+                ['5 km', '5000'],
+                ['10 km', '10000'],
+                ['25 km', '25000'],
+              ].map(([label, value]) => (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.presetBtn, fenceRadius === value && styles.presetBtnActive]}
+                  onPress={() => setFenceRadius(value)}
+                >
+                  <Text style={[styles.presetText, fenceRadius === value && styles.presetTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <Text style={styles.modalHint}>
-              💡 Tip: Current location of {fenceUser?.name} is pre-filled. Adjust as needed.
+              The admin will receive an alert with the user's name when the user leaves this range.
             </Text>
 
             <TouchableOpacity style={styles.modalBtn} onPress={createGeofence}>
-              <Text style={styles.modalBtnText}>Create Safe Zone</Text>
+              <Text style={styles.modalBtnText}>{fenceMode === 'all' ? 'Apply to All Users' : 'Create Range'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowFenceModal(false)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
@@ -428,7 +498,17 @@ const styles = StyleSheet.create({
   fenceBtn: {
     backgroundColor: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)',
   },
+  deleteUserBtn: {
+    backgroundColor: 'rgba(220,38,38,0.18)', borderColor: 'rgba(220,38,38,0.4)',
+  },
   actionBtnText: { color: '#e2e8f0', fontSize: 12, fontWeight: '700' },
+
+  rangeAllBtn: {
+    backgroundColor: 'rgba(59,130,246,0.16)', borderRadius: 14,
+    paddingVertical: 14, alignItems: 'center', marginBottom: 14,
+    borderWidth: 1, borderColor: 'rgba(59,130,246,0.32)',
+  },
+  rangeAllBtnText: { color: '#93c5fd', fontSize: 15, fontWeight: '800' },
 
   fenceCard: {
     backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 16,
@@ -459,6 +539,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 12, color: '#fff', fontSize: 15,
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
   },
+  radiusPresets: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  presetBtn: {
+    flex: 1, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)',
+    paddingVertical: 10, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  presetBtnActive: { borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.18)' },
+  presetText: { color: '#94a3b8', fontSize: 12, fontWeight: '700' },
+  presetTextActive: { color: '#93c5fd' },
   modalHint: { fontSize: 12, color: '#4a5568', marginTop: 12, lineHeight: 18 },
   modalBtn: {
     backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 14,
