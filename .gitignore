@@ -17,6 +17,12 @@ yarn-error.log*
 mobile/android/.gradle/
 mobile/android/build/
 mobile/android/app/build/
+mobile/android/app/src/main/assets/
+mobile/android/app/src/main/res/drawable-hdpi/
+mobile/android/app/src/main/res/drawable-mdpi/
+mobile/android/app/src/main/res/drawable-xhdpi/
+mobile/android/app/src/main/res/drawable-xxhdpi/
+mobile/android/app/src/main/res/drawable-xxxhdpi/
 mobile/build/
 mobile/NUL
 mobile/.metro-cache/
