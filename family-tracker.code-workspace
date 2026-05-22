@@ -1,0 +1,94 @@
+{
+  "folders": [
+    {
+      "name": "🖥️ Backend",
+      "path": "backend"
+    },
+    {
+      "name": "📱 Mobile (React Native)",
+      "path": "mobile"
+    },
+    {
+      "name": "📚 Docs",
+      "path": "docs"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2,
+    "editor.fontSize": 14,
+    "editor.lineHeight": 1.6,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "javascript.updateImportsOnFileMove.enabled": "always",
+    "emmet.includeLanguages": {
+      "javascript": "javascriptreact"
+    },
+    "reactNativeTools.packagerPort": 8081,
+    "[javascript]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[json]": {
+      "editor.defaultFormatter": "esbenp.prettier-vscode"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "msjsdiag.vscode-react-native",
+      "mongodb.mongodb-vscode",
+      "rangav.vscode-thunder-client",
+      "eamodio.gitlens",
+      "github.copilot",
+      "github.copilot-chat",
+      "ms-azuretools.vscode-docker"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Attach to Packager",
+        "type": "reactnative",
+        "request": "attach",
+        "port": 8081
+      },
+      {
+        "name": "Debug Backend",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder:🖥️ Backend}/server.js",
+        "envFile": "${workspaceFolder:🖥️ Backend}/.env",
+        "console": "integratedTerminal"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Start Backend",
+        "type": "shell",
+        "command": "cd backend && npm run dev",
+        "group": "build",
+        "presentation": { "panel": "dedicated", "reveal": "always" }
+      },
+      {
+        "label": "Start Metro (Mobile)",
+        "type": "shell",
+        "command": "cd mobile && npx react-native start",
+        "group": "build",
+        "presentation": { "panel": "dedicated", "reveal": "always" }
+      },
+      {
+        "label": "Build APK",
+        "type": "shell",
+        "command": "cd mobile/android && ./gradlew assembleRelease",
+        "group": "build",
+        "presentation": { "panel": "dedicated", "reveal": "always" }
+      }
+    ]
+  }
+}
