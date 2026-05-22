@@ -56,7 +56,7 @@ const LoginScreen = ({ navigation }) => {
               <Text style={styles.logoIcon}>📡</Text>
               <View style={styles.pingRing} />
             </View>
-            <Text style={styles.appName}>FamilyTracker</Text>
+            <Text style={styles.appName}>Family Centre</Text>
             <Text style={styles.tagline}>Always Connected. Always Safe.</Text>
           </View>
 

@@ -53,7 +53,7 @@ const RegisterScreen = ({ navigation }) => {
           </TouchableOpacity>
 
           <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join Family Tracker</Text>
+          <Text style={styles.subtitle}>Join Family Centre</Text>
 
           <View style={styles.card}>
             {/* Role selector */}

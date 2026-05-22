@@ -128,7 +128,7 @@ const UserHomeScreen = () => {
         <Text style={styles.gateIcon}>🚫</Text>
         <Text style={styles.gateTitle}>Location Required</Text>
         <Text style={styles.gateSubtitle}>
-          Family Tracker requires location access to function.{'\n'}
+          Family Centre requires location access to function.{'\n'}
           This app cannot be used without location permission.
         </Text>
         <TouchableOpacity style={styles.gateBtn} onPress={openSettings}>
@@ -148,7 +148,7 @@ const UserHomeScreen = () => {
         <Text style={styles.gateTitle}>Turn On Location</Text>
         <Text style={styles.gateSubtitle}>
           Your GPS is disabled.{'\n'}
-          Please turn on location to use Family Tracker.
+          Please turn on location to use Family Centre.
         </Text>
         <TouchableOpacity style={styles.gateBtn} onPress={openLocationSettings}>
           <Text style={styles.gateBtnText}>Enable GPS</Text>

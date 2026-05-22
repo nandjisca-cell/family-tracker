@@ -37,8 +37,8 @@ export const requestLocationPermission = async () => {
       const fineGranted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Family Tracker - Location Access',
-          message: 'Family Tracker needs your location to keep your family safe. Location access is REQUIRED to use this app.',
+          title: 'Family Centre - Location Access',
+          message: 'Family Centre needs your location to keep your family safe. Location access is REQUIRED to use this app.',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
           buttonPositive: 'Allow',
@@ -49,7 +49,7 @@ export const requestLocationPermission = async () => {
         PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION,
         {
           title: 'Background Location Required',
-          message: 'Allow Family Tracker to track location in the background for continuous safety monitoring.',
+          message: 'Allow Family Centre to track location in the background for continuous safety monitoring.',
           buttonNegative: 'Deny',
           buttonPositive: 'Allow Always',
         }
