@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
-// Admin: list all managed users
+// Admin: list all family users
 router.get('/users', async (req, res) => {
   try {
     if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
-    const admin = await User.findById(req.user._id)
-      .populate('managedUsers', 'name phone lastSeen isActive');
-    res.json({ users: admin.managedUsers });
+    const users = await User.find({ role: 'user', isActive: true })
+      .select('name phone lastSeen isActive')
+      .sort({ lastSeen: -1, createdAt: -1 });
+    res.json({ users });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

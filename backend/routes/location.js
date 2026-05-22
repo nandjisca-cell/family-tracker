@@ -57,20 +57,20 @@ router.get('/history/:userId', async (req, res) => {
   }
 });
 
-// Admin: get all managed users' latest locations
+// Admin: get all family users' latest locations
 router.get('/all-latest', async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin only' });
     }
 
-    const admin = await User.findById(req.user._id).populate('managedUsers', 'name phone lastSeen');
-    const userIds = admin.managedUsers.map(u => u._id);
+    const users = await User.find({ role: 'user', isActive: true })
+      .select('name phone lastSeen')
+      .sort({ lastSeen: -1, createdAt: -1 });
 
     const latestLocations = await Promise.all(
-      userIds.map(async (uid) => {
-        const loc = await Location.findOne({ userId: uid }).sort({ timestamp: -1 });
-        const user = admin.managedUsers.find(u => u._id.toString() === uid.toString());
+      users.map(async (user) => {
+        const loc = await Location.findOne({ userId: user._id }).sort({ timestamp: -1 });
         return { user, location: loc };
       })
     );
